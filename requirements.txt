@@ -1,0 +1,6 @@
+torch
+numpy
+opencv-python
+timm
+fairscale
+wheel
