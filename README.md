@@ -5,9 +5,11 @@
 
 <br>
 
-   We present SegGPT, a generalist model for segmenting everything in context. With only one single model, SegGPT can perform arbitrary segmentation tasks in images or videos via in-context inference, such as object instance, stuff, part, contour, and text. 
+   This repository contains inference functions for SegGPT, a generalist model for segmenting everything in context. With only one single model, SegGPT can perform arbitrary segmentation tasks in images or videos via in-context inference, such as object instance, stuff, part, contour, and text. 
    SegGPT is evaluated on a broad range of tasks, including few-shot semantic segmentation, video object segmentation, semantic segmentation, and panoptic segmentation. 
    Our results show strong capabilities in segmenting in-domain and out-of-domain targets, either qualitatively or quantitatively. 
+
+  This repository is forked from [BAAI's Painter repository](https://github.com/baaivision/Painter).
 
 [[Paper]](https://arxiv.org/abs/2304.03284)
 [[Demo]](https://huggingface.co/spaces/BAAI/SegGPT)
