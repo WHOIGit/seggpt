@@ -55,68 +55,138 @@ def run_one_image(img, tgt, model, device):
     return output
 
 
-def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_dir):
+def to_patches(image, patch_size):
+    """
+    Convert the given PIL image into patches of the specified size.
+    """
+    patches = []
+    # Calculate the number of patches in both dimensions
+    num_patches_x = image.width // patch_size
+    num_patches_y = image.height // patch_size
+
+    patch_id = 0
+    for i in range(num_patches_x):
+        for j in range(num_patches_y):
+            # Calculate the bounding box of the current patch
+            left = i * patch_size
+            upper = j * patch_size
+            right = left + patch_size
+            lower = upper + patch_size
+
+            # Crop the patch from the image
+            patches.append(image.crop((left, upper, right, lower)))
+    return patches
+
+
+def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_dir, patchify):
+    print('patchify: ', patchify)
     prompt_names = os.listdir(prompt_dir)
     prompt_paths = [os.path.join(prompt_dir, prompt_img_name) for prompt_img_name in prompt_names]
 
     target_paths = [os.path.join(target_dir, prompt_img_name) for prompt_img_name in prompt_names]
     target_paths = [os.path.splitext(target)[0] + '_target.png' for target in target_paths]
 
+    # If using patches, convert all prompt and target images to patches
+    prompt_images = []
+    target_images = []
+    if patchify:
+        patch_size = 448
+        for prompt_path in prompt_paths:
+           prompt_image = Image.open(prompt_path).convert("RGB")
+           prompt_images.extend(to_patches(prompt_image, patch_size))
+        
+        for target_path in target_paths:
+           target_image = Image.open(target_path).convert("RGB")
+           target_images.extend(to_patches(target_image, patch_size))
+    else:
+        prompt_images = [Image.open(img).convert("RGB") for img in prompt_images]
+        target_images = [Image.open(img).convert("RGB") for img in target_images]
+
     for img_name in tqdm(sorted(os.listdir(input_dir))):
         img_path = os.path.join(input_dir, img_name)
         output_path = os.path.splitext(os.path.join(out_dir, img_name))[0] + '_annotated' + '.png'
-        inference_image(model, device, img_path, prompt_paths, target_paths, output_path)
+        inference_and_save_image(model, device, img_path, prompt_images, target_images, output_path, patchify)
 
 
-def inference_image(model, device, img_path, prompt_paths, target_paths, out_path):
+def inference_and_save_image(model, device, img_path, prompt_images, target_images, out_path, patchify):
+    patch_size = 448
+    input_image = Image.open(img_path).convert("RGB")
+    if patchify:
+        patches = to_patches(input_image, 448)
+        annotated_patches = []
+        num_patches_x = input_image.width // patch_size
+        num_patches_y = input_image.height // patch_size
+        for patch in tqdm(patches):
+            annotated_patches.append(inference_image(model, device, patch, prompt_images, target_images))
+
+        reconstructed_image = Image.new('RGB', (num_patches_x * patch_size, num_patches_y * patch_size))
+        patch_id = 0
+        for i in range(num_patches_x):
+            for j in range(num_patches_y):
+                # Calculate the position where the patch should be placed
+                left = i * patch_size
+                upper = j * patch_size
+
+                # Paste the patch into the reconstructed image
+                reconstructed_image.paste(patches[patch_id], (left, upper))
+                patch_id += 1
+        reconstructed_image.save(out_path)
+    else:
+        output = inference_image(model, device, input_image, prompt_images, target_images)
+        output = Image.fromarray((np.array(input_image) * (0.6 * output / 255 + 0.4)).astype(np.uint8))
+        output.save(out_path)
+
+
+def inference_image(model, device, input_image, prompt_images, target_images):
     res, hres = 448, 448
 
-    image = Image.open(img_path).convert("RGB")
-    input_image = np.array(image)
-    size = image.size
-    image = np.array(image.resize((res, hres))) / 255.
+    # Open the input image and resize it
+    size = input_image.size
+    input_image = np.array(input_image.resize((res, hres))) / 255.
 
     image_batch, target_batch = [], []
-    for img2_path, tgt2_path in zip(prompt_paths, target_paths):
-        img2 = Image.open(img2_path).convert("RGB")
-        img2 = img2.resize((res, hres))
-        img2 = np.array(img2) / 255.
+    # For each prompt-target pair, add them to the list of 
+    for prompt_image, target_image in zip(prompt_images, target_images):
+        prompt_image = prompt_image.resize((res, hres))
+        prompt_image = np.array(prompt_image) / 255.
 
-        tgt2 = Image.open(tgt2_path).convert("RGB")
-        tgt2 = tgt2.resize((res, hres), Image.NEAREST)
-        tgt2 = np.array(tgt2) / 255.
+        target_image = target_image.resize((res, hres), Image.NEAREST)
+        target_image = np.array(target_image) / 255.
 
-        tgt = tgt2  # tgt is not available
-        tgt = np.concatenate((tgt2, tgt), axis=0)
-        img = np.concatenate((img2, image), axis=0)
+        target_to_fill = target_image  # target_to_fill is not available
+        # stack target image over the target that will be filled
+        stacked_targets = np.concatenate((target_image, target_to_fill), axis=0)
+        # stack prompt image over the input image
+        stacked_images = np.concatenate((prompt_image, input_image), axis=0)
     
-        assert img.shape == (2*res, res, 3), f'{img.shape}'
+        assert stacked_images.shape == (2*res, hres, 3), f'{stacked_images.shape}'
         # normalize by ImageNet mean and std
-        img = img - imagenet_mean
-        img = img / imagenet_std
+        stacked_images = stacked_images - imagenet_mean
+        stacked_images = stacked_images / imagenet_std
 
-        assert tgt.shape == (2*res, res, 3), f'{img.shape}'
+        assert stacked_targets.shape == (2*res, hres, 3), f'{stacked_targets.shape}'
         # normalize by ImageNet mean and std
-        tgt = tgt - imagenet_mean
-        tgt = tgt / imagenet_std
+        stacked_targets = stacked_targets - imagenet_mean
+        stacked_targets = stacked_targets / imagenet_std
 
-        image_batch.append(img)
-        target_batch.append(tgt)
+        image_batch.append(stacked_images)
+        target_batch.append(stacked_targets)
 
-    img = np.stack(image_batch, axis=0)
-    tgt = np.stack(target_batch, axis=0)
+    # convert list of images/targets into a batched tensor of shape (n, h, w, c)
+    image_batch_array = np.stack(image_batch, axis=0)
+    target_batch_array = np.stack(target_batch, axis=0)
 
     """### Run SegGPT on the image"""
     # make random mask reproducible (comment out to make it change)
     torch.manual_seed(2)
-    output = run_one_image(img, tgt, model, device)
+    output = run_one_image(image_batch_array, target_batch_array, model, device)
     output = F.interpolate(
         output[None, ...].permute(0, 3, 1, 2), 
         size=[size[1], size[0]], 
         mode='nearest',
     ).permute(0, 2, 3, 1)[0].numpy()
-    output = Image.fromarray((input_image * (0.6 * output / 255 + 0.4)).astype(np.uint8))
-    output.save(out_path)
+
+    return output
 
 
 def inference_video(model, device, vid_path, num_frames, img2_paths, tgt2_paths, out_path, img_path, anno_color=''):

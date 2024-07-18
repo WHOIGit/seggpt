@@ -31,6 +31,7 @@ def get_args_parser():
     parser.add_argument('--input_dir', type=str, help='directory of input images to be segmented')
     parser.add_argument('--prompt_dir', type=str, help='directory of prompt images to use as context')
     parser.add_argument('--target_dir', type=str, help='directory of target images, i.e., binary mask images of the prompt images')
+    parser.add_argument('--patch_images', action='store_true', help='divide images into 448x448 patches')
     return parser.parse_args()
 
 
@@ -56,7 +57,7 @@ if __name__ == '__main__':
     if args.input_dir is not None:
         assert args.prompt_dir is not None and args.target_dir is not None
 
-        inference_image_dir(model, device, args.input_dir, args.prompt_dir, args.target_dir, args.output_dir)
+        inference_image_dir(model, device, args.input_dir, args.prompt_dir, args.target_dir, args.output_dir, args.patch_images)
 
     # Input image, prompt image, target image
     if args.input_image is not None:
