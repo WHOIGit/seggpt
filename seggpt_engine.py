@@ -2,6 +2,7 @@ import os
 import torch
 import torch.nn.functional as F
 import numpy as np
+import random
 import cv2
 from tqdm import tqdm
 
@@ -59,10 +60,20 @@ def to_patches(image, patch_size):
     """
     Convert the given PIL image into patches of the specified size.
     """
+    # Get the original dimensions
+    img_width, img_height = image.size
+    
+    # Calculate the new dimensions
+    new_width = (img_width // patch_size) * patch_size
+    new_height = (img_height // patch_size) * patch_size
+
+    # Resize the image
+    resized_image = image.resize((new_width, new_height))
+
     patches = []
     # Calculate the number of patches in both dimensions
-    num_patches_x = image.width // patch_size
-    num_patches_y = image.height // patch_size
+    num_patches_x = resized_image.width // patch_size
+    num_patches_y = resized_image.height // patch_size
 
     patch_id = 0
     for i in range(num_patches_x):
@@ -74,7 +85,7 @@ def to_patches(image, patch_size):
             lower = upper + patch_size
 
             # Crop the patch from the image
-            patches.append(image.crop((left, upper, right, lower)))
+            patches.append(resized_image.crop((left, upper, right, lower)))
     return patches
 
 
@@ -98,9 +109,17 @@ def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_di
         for target_path in target_paths:
            target_image = Image.open(target_path).convert("RGB")
            target_images.extend(to_patches(target_image, patch_size))
+
+        paired_list = list(zip(prompt_images, target_images))
+        samples = random.sample(paired_list, 8)
+        prompt_images, target_images = zip(*samples)
+        for np, p in enumerate(prompt_images):
+            p.save(f'prompt_{np}.png')
+        for nt, t in enumerate(target_images):
+            t.save(f'target_{nt}.png')
     else:
-        prompt_images = [Image.open(img).convert("RGB") for img in prompt_images]
-        target_images = [Image.open(img).convert("RGB") for img in target_images]
+        prompt_images = [Image.open(img).convert("RGB") for img in prompt_paths]
+        target_images = [Image.open(img).convert("RGB") for img in target_paths]
 
     for img_name in tqdm(sorted(os.listdir(input_dir))):
         img_path = os.path.join(input_dir, img_name)
@@ -112,12 +131,16 @@ def inference_and_save_image(model, device, img_path, prompt_images, target_imag
     patch_size = 448
     input_image = Image.open(img_path).convert("RGB")
     if patchify:
-        patches = to_patches(input_image, 448)
+        patches = to_patches(input_image, patch_size)
         annotated_patches = []
         num_patches_x = input_image.width // patch_size
         num_patches_y = input_image.height // patch_size
+        pn = 0
         for patch in tqdm(patches):
+            patch.save(f'patch_{pn}.png')
             annotated_patches.append(inference_image(model, device, patch, prompt_images, target_images))
+            Image.fromarray(annotated_patches[-1].astype(np.uint8)).save(f'test{len(annotated_patches)}.png')
+            pn += 1
 
         reconstructed_image = Image.new('RGB', (num_patches_x * patch_size, num_patches_y * patch_size))
         patch_id = 0
@@ -128,7 +151,8 @@ def inference_and_save_image(model, device, img_path, prompt_images, target_imag
                 upper = j * patch_size
 
                 # Paste the patch into the reconstructed image
-                reconstructed_image.paste(patches[patch_id], (left, upper))
+                merged_patch = Image.fromarray((np.array(patches[patch_id]) * (0.6 * annotated_patches[patch_id] / 255 + 0.4)).astype(np.uint8))
+                reconstructed_image.paste(merged_patch, (left, upper))
                 patch_id += 1
         reconstructed_image.save(out_path)
     else:
@@ -158,7 +182,7 @@ def inference_image(model, device, input_image, prompt_images, target_images):
         stacked_targets = np.concatenate((target_image, target_to_fill), axis=0)
         # stack prompt image over the input image
         stacked_images = np.concatenate((prompt_image, input_image), axis=0)
-    
+
         assert stacked_images.shape == (2*res, hres, 3), f'{stacked_images.shape}'
         # normalize by ImageNet mean and std
         stacked_images = stacked_images - imagenet_mean
@@ -282,7 +306,6 @@ def inference_video(model, device, vid_path, num_frames, img2_paths, tgt2_paths,
             img_name = img_path % i
         else:
             img_name = os.path.join(img_path, os.path.splitext(os.path.basename(frame_name))[0] + '.png')
-            print(img_name)
         img_to_write = np.tile((output.mean(-1) > 128).astype(np.float32)[:, :, np.newaxis], (1, 1, 3)).astype(np.uint8)
         img_to_write[:] = anno_color.split()
         cv2.imwrite(img_name, img_to_write)
