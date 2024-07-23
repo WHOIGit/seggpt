@@ -5,6 +5,9 @@ from seggpt import SegGPT
 
 
 def seggpt_vit_large_patch16_input896x448(**kwargs):
+    """
+    Returns a SegGPT model with the default configuration from the seggpt_vit_large weights.
+    """
     model = SegGPT(
         img_size=(896, 448), patch_size=16, embed_dim=1024, depth=24, num_heads=16,
         drop_path_rate=0.1, window_size=14, qkv_bias=True,
