@@ -35,14 +35,28 @@ class SegGPTHandler(BaseHandler):
             with zipfile.ZipFile(extras_zip_path, "r") as zip_file:
                 zip_file.extractall(model_dir)
 
-        import seggpt_models
+        from seggpt_models import seggpt_vit_large_patch16_input896x448
+
+        # Determine device
+        if torch.cuda.is_available():
+            logger.info("Using CUDA")
+            self.map_location = 'cuda'
+            self.device = torch.device('cuda:0')
+        #elif torch.backends.mps.is_available():
+        #    logger.info("Using MPS")
+        #    self.map_location = 'mps'
+        #    self.device = torch.device('mps')
+        #    os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+        else:
+            logger.info("Using CPU")
+            self.map_location = 'cpu'
+            self.device = torch.device('cpu')
 
         # Load model
-        arch = 'seggpt_vit_large_patch16_input896x448'
-        self.model = getattr(seggpt_models, arch)()
+        self.model = seggpt_vit_large_patch16_input896x448()
         self.model.seg_type = 'instance'
         seggpt_chkpt = torch.load(
-            os.path.join(model_dir, "seggpt_vit_large.pth"), map_location='cpu', weights_only=True
+            os.path.join(model_dir, "seggpt_vit_large.pth"), map_location=self.map_location, weights_only=True
         )
         self.model.load_state_dict(seggpt_chkpt['model'], strict=False)
 
@@ -56,27 +70,44 @@ class SegGPTHandler(BaseHandler):
     def preprocess(self, data):
         """ Preprocess the data into a form usable by SegGPT """
         images = []
+        logger.info('processing img')
 
         for row in data:
+            logger.info('processing row')
             image = row.get("data") or row.get("body")
+            logger.info('got image')
             if isinstance(image, str):
+                logger.info('image is a str')
                 image = base64.b64decode(image)
 
             # If the image is sent as bytesarray
             if isinstance(image, (bytearray, bytes)):
+                logger.info('image is a bytes array')
                 image = Image.open(io.BytesIO(image))
-                image = self.image_processing(image)
+
             else:
                 # if the image is a list
+                logger.info('image is neither')
                 image = torch.FloatTensor(image)
 
             images.append(image)
 
-        return torch.stack(images).to(self.device)
+        return images[0]
 
 
     def inference(self, data):
         """ Perform inference on the input data """
-        with torch.no_grad():
-            output = self.model(data)
+        from seggpt_engine import inference_single_image                                                                    
+
+        output = inference_single_image(self.model, self.device, data, 'prompts', 'targets', 'outputs', True, 8, save_image=False)
         return output
+
+    def postprocess(self, data):
+        """
+        Convert the output PIL images into a binary form. 
+        """
+        binary = io.BytesIO()
+        data.save(binary, format='PNG')
+        binary_image = binary.getvalue()
+        binary.close()
+        return [binary_image]

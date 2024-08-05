@@ -93,28 +93,24 @@ def to_patches(image, patch_size):
     return patches
 
 
-def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_dir, patchify, num_patches):
+def generate_prompt_target_images(prompt_dir: list, target_dir: list, patchify: bool = False, patch_size: int = 448, num_patches: int = 8):
     """
-    Run inference on the images in the given input directory, using prompts and targets from the given prompt and
-    target directories, respectively. If patchify is specified, divides the prompt and target images into patches, 
-    and randomly selects the specified number of patches to use as model context.
+    Generate prompt and target PIL Images from the given prompt and target directories. Split them 
+    into patches if patchify is True.
     """
-    print('patchify: ', patchify)
     prompt_names = os.listdir(prompt_dir)
     prompt_paths = [os.path.join(prompt_dir, prompt_img_name) for prompt_img_name in prompt_names]
 
     target_paths = [os.path.join(target_dir, prompt_img_name) for prompt_img_name in prompt_names]
     target_paths = [os.path.splitext(target)[0] + '_target.png' for target in target_paths]
 
-    # If using patches, convert all prompt and target images to patches
     prompt_images = []
     target_images = []
     if patchify:
-        patch_size = 448
         for prompt_path in prompt_paths:
            prompt_image = Image.open(prompt_path).convert("RGB")
            prompt_images.extend(to_patches(prompt_image, patch_size))
-        
+
         for target_path in target_paths:
            target_image = Image.open(target_path).convert("RGB")
            target_images.extend(to_patches(target_image, patch_size))
@@ -126,19 +122,60 @@ def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_di
         prompt_images = [Image.open(img).convert("RGB") for img in prompt_paths]
         target_images = [Image.open(img).convert("RGB") for img in target_paths]
 
+    return prompt_images, target_images
+
+
+def inference_single_image(model, device, input_image: Image, prompt_dir, target_dir, out_dir, patchify, num_patches, output_image_name: str = '', save_image=True):
+    """
+    Run inference on the given PIL image, using the prompts and targets from the given prompt and target directories, 
+    respectively. If patchify is specified, divides the prompt and target images into patches, and randomly selects 
+    the specified number of patches to use as model context.
+    """
+    print('patchify: ', patchify)
+    patch_size = 448
+    prompt_images, target_images = generate_prompt_target_images(prompt_dir, target_dir, patchify, patch_size, num_patches)
+
+    output_path = os.path.join(out_dir, output_image_name)
+    output_mask = inference_and_save_image(model, device, input_image, prompt_images, target_images, output_path, patchify, save_image)
+    return output_mask
+
+
+
+def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_dir, patchify, num_patches, save_images=True):
+    """
+    Run inference on the images in the given input directory, using prompts and targets from the given prompt and
+    target directories, respectively. If patchify is specified, divides the prompt and target images into patches, 
+    and randomly selects the specified number of patches to use as model context.
+    """
+    print('patchify: ', patchify)
+    patch_size = 448
+    prompt_images, target_images = generate_prompt_target_images(prompt_dir, target_dir, patchify, patch_size, num_patches)
+
+    output_masks = []
     for img_name in tqdm(sorted(os.listdir(input_dir))):
         img_path = os.path.join(input_dir, img_name)
         output_path = os.path.splitext(os.path.join(out_dir, img_name))[0] + '_annotated' + '.png'
-        inference_and_save_image(model, device, img_path, prompt_images, target_images, output_path, patchify)
+        output_mask = inference_and_save_image(model, device, img_path, prompt_images, target_images, output_path, patchify, save_images)
+        output_masks.append(output_mask)
+    
+    return output_masks
+    
 
 
-def inference_and_save_image(model, device, img_path, prompt_images, target_images, out_path, patchify):
+def inference_and_save_image(model, device, input_image, prompt_images, target_images, out_path, patchify, save_image=True):
     """
     Run inference on the image at the given img_path, using the given prompt and target images. If patchify is 
     specified, divides the images into separate patches to reduce data loss from resizing.
     """
     patch_size = 448
-    input_image = Image.open(img_path).convert("RGB")
+
+    # If input_image is a path, convert it to a PIL Image
+    if (isinstance(input_image, str)):
+        input_image = Image.open(input_image).convert("RGB")
+    else:
+        if not isinstance(input_image, Image.Image):
+            raise TypeError(f'Input image must be either a string path or a PIL Image. Received {type(input_image)}.')
+
     if patchify:
         patches = to_patches(input_image, patch_size)
         annotated_patches = []
@@ -159,11 +196,15 @@ def inference_and_save_image(model, device, img_path, prompt_images, target_imag
                 merged_patch = Image.fromarray((np.array(patches[patch_id]) * (0.6 * annotated_patches[patch_id] / 255 + 0.4)).astype(np.uint8))
                 reconstructed_image.paste(merged_patch, (left, upper))
                 patch_id += 1
-        reconstructed_image.save(out_path)
+        output = reconstructed_image
     else:
         output = inference_image(model, device, input_image, prompt_images, target_images)
         output = Image.fromarray((np.array(input_image) * (0.6 * output / 255 + 0.4)).astype(np.uint8))
+
+    if save_image:
         output.save(out_path)
+    
+    return output
 
 
 def inference_image(model, device, input_image, prompt_images, target_images):
