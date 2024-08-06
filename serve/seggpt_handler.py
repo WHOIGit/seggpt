@@ -42,11 +42,14 @@ class SegGPTHandler(BaseHandler):
             logger.info("Using CUDA")
             self.map_location = 'cuda'
             self.device = torch.device('cuda:0')
-        #elif torch.backends.mps.is_available():
-        #    logger.info("Using MPS")
-        #    self.map_location = 'mps'
-        #    self.device = torch.device('mps')
-        #    os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+
+        # MPS does not support all of PyTorch's functions used in SegGPT yet. The operator aten::upsample_bicubic2d.out 
+        # is not implemented for MPS
+        # elif torch.backends.mps.is_available():
+        #     logger.info("Using MPS")
+        #     self.map_location = 'mps'
+        #     self.device = torch.device('mps')
+        #     os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
         else:
             logger.info("Using CPU")
             self.map_location = 'cpu'
