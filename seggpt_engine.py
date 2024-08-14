@@ -61,7 +61,7 @@ def run_one_image(img, tgt, model, device):
     return output
 
 
-def to_patches(image, patch_size):
+def to_patches(image: Image.Image, patch_size: int):
     """
     Convert the given PIL image into patches of the specified size.
     """
@@ -125,7 +125,7 @@ def generate_prompt_target_images(prompt_dir: list, target_dir: list, patchify: 
     return prompt_images, target_images
 
 
-def inference_single_image(model, device, input_image: Image, prompt_dir, target_dir, out_dir, patchify, num_patches, output_image_name: str = '', save_image=True):
+def inference_single_image(model, device, input_image: Image, prompt_dir, target_dir, out_dir, patchify, num_patches, output_image_name: str = 'output', save_image=True):
     """
     Run inference on the given PIL image, using the prompts and targets from the given prompt and target directories, 
     respectively. If patchify is specified, divides the prompt and target images into patches, and randomly selects 
@@ -135,9 +135,11 @@ def inference_single_image(model, device, input_image: Image, prompt_dir, target
     patch_size = 448
     prompt_images, target_images = generate_prompt_target_images(prompt_dir, target_dir, patchify, patch_size, num_patches)
 
-    output_path = os.path.join(out_dir, output_image_name)
-    output_mask = inference_and_save_image(model, device, input_image, prompt_images, target_images, output_path, patchify, save_image)
-    return output_mask
+    img_path_no_ext = os.path.splitext(os.path.join(out_dir, output_image_name))[0]
+    output_merged_path = img_path_no_ext + '_merged' + '.png'
+    output_mask_path =img_path_no_ext + '_mask' + '.png'
+    output_merged_img, output_mask_img = inference_and_save_image(model, device, input_image, prompt_images, target_images, output_merged_path, output_mask_path, patchify, save_image)
+    return output_merged_img, output_mask_img
 
 
 
@@ -151,18 +153,21 @@ def inference_image_dir(model, device, input_dir, prompt_dir, target_dir, out_di
     patch_size = 448
     prompt_images, target_images = generate_prompt_target_images(prompt_dir, target_dir, patchify, patch_size, num_patches)
 
+    output_merged_imgs = []
     output_masks = []
     for img_name in tqdm(sorted(os.listdir(input_dir))):
         img_path = os.path.join(input_dir, img_name)
-        output_path = os.path.splitext(os.path.join(out_dir, img_name))[0] + '_annotated' + '.png'
-        output_mask = inference_and_save_image(model, device, img_path, prompt_images, target_images, output_path, patchify, save_images)
-        output_masks.append(output_mask)
-    
-    return output_masks
-    
+        img_path_no_ext = os.path.splitext(os.path.join(out_dir, img_name))[0]
+        output_merged_path = img_path_no_ext + '_merged' + '.png'
+        output_mask_path =img_path_no_ext + '_mask' + '.png'
+        output_merged_img, output_mask_img = inference_and_save_image(model, device, img_path, prompt_images, target_images, output_merged_path, output_mask_path, patchify, save_images)
+        output_merged_imgs.append(output_merged_img)
+        output_masks.append(output_mask_img)
+
+    return output_merged_imgs, output_masks
 
 
-def inference_and_save_image(model, device, input_image, prompt_images, target_images, out_path, patchify, save_image=True):
+def inference_and_save_image(model, device, input_image, prompt_images, target_images, out_merged_path, out_mask_path, patchify, save_image=True):
     """
     Run inference on the image at the given img_path, using the given prompt and target images. If patchify is 
     specified, divides the images into separate patches to reduce data loss from resizing.
@@ -177,6 +182,7 @@ def inference_and_save_image(model, device, input_image, prompt_images, target_i
             raise TypeError(f'Input image must be either a string path or a PIL Image. Received {type(input_image)}.')
 
     if patchify:
+        original_width, original_height = input_image.size
         patches = to_patches(input_image, patch_size)
         annotated_patches = []
         num_patches_x = input_image.width // patch_size
@@ -193,18 +199,26 @@ def inference_and_save_image(model, device, input_image, prompt_images, target_i
                 upper = j * patch_size
 
                 # Paste the patch into the reconstructed image
-                merged_patch = Image.fromarray((np.array(patches[patch_id]) * (0.6 * annotated_patches[patch_id] / 255 + 0.4)).astype(np.uint8))
-                reconstructed_image.paste(merged_patch, (left, upper))
+                annotated_patch = Image.fromarray(annotated_patches[patch_id].astype(np.uint8))
+                reconstructed_image.paste(annotated_patch, box=(left, upper, left + annotated_patch.width, upper + annotated_patch.height))
                 patch_id += 1
-        output = reconstructed_image
+        # Resize reconstructed patched image to original size
+        output_mask_img = reconstructed_image.resize((original_width, original_height))
+        output_merged = Image.fromarray((np.array(input_image) * (0.6 * np.array(output_mask_img) / 255 + 0.4)).astype(np.uint8))
     else:
         output = inference_image(model, device, input_image, prompt_images, target_images)
-        output = Image.fromarray((np.array(input_image) * (0.6 * output / 255 + 0.4)).astype(np.uint8))
+
+        # Create PIL Images for merged output (original image + mask) and mask
+        output_mask_img = Image.fromarray((output).astype(np.uint8))
+        output_merged = Image.fromarray((np.array(input_image) * (0.6 * output / 255 + 0.4)).astype(np.uint8))
+
+        output_mask_img = Image.fromarray((output).astype(np.uint8))
 
     if save_image:
-        output.save(out_path)
-    
-    return output
+        output_mask_img.save(out_mask_path)
+        output_merged.save(out_merged_path)
+
+    return output_merged, output_mask_img
 
 
 def inference_image(model, device, input_image, prompt_images, target_images):
