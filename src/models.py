@@ -1,7 +1,7 @@
 from functools import partial
 import torch.nn as nn
 
-from seggpt import SegGPT
+from .seggpt import SegGPT
 
 
 def seggpt_vit_large_patch16_input896x448(**kwargs):

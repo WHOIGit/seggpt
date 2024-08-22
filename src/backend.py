@@ -7,7 +7,7 @@ from detectron2.layers import CNNBlockBase, Conv2d, get_norm
 from timm.models.layers import DropPath, trunc_normal_
 from timm.models.vision_transformer import Mlp
 
-from util.vitdet_utils import (
+from .util.vitdet_utils import (
     add_decomposed_rel_pos,
     window_partition,
     window_unpartition,

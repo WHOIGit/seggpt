@@ -5,9 +5,9 @@ import torch.nn.functional as F
 ##########################
 from fairscale.nn.checkpoint import checkpoint_wrapper
 from timm.models.layers import trunc_normal_
-from seggpt_backend import Block
+from .backend import Block
 
-from util.vitdet_utils import (
+from .util.vitdet_utils import (
     PatchEmbed,
     get_abs_pos,
     LayerNorm2D,

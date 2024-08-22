@@ -1,8 +1,8 @@
 import torch
 import argparse
 
-from seggpt_engine import inference_image_dir
-import seggpt_models
+import src.models as models
+from src.engine import infer
 
 
 def get_args_parser():
@@ -33,7 +33,7 @@ def prepare_model(chkpt_dir, arch='seggpt_vit_large_patch16_input896x448', seg_t
     Load the specified configuration type and checkpoint.
     """
     # build model
-    model = getattr(seggpt_models, arch)()
+    model = getattr(models, arch)()
     model.seg_type = seg_type
     # load model
     checkpoint = torch.load(chkpt_dir, map_location='cpu', weights_only=True)
@@ -50,4 +50,4 @@ if __name__ == '__main__':
     print('Model loaded.')
 
     # Perform inference on a directory of input images, directory of prompt images, and directory of target images
-    inference_image_dir(model, device, args.input_dir, args.prompt_dir, args.target_dir, args.output_dir, args.patch_images, args.num_prompts)
+    infer(model, device, args.input_dir, args.prompt_dir, args.target_dir, args.output_dir, args.patch_images, args.num_prompts, True)
