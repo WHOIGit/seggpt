@@ -5,11 +5,13 @@ import base64
 import logging
 import zipfile
 from PIL import Image
+from collections import defaultdict
 
 from ts.torch_handler.base_handler import BaseHandler
 
 
 logger = logging.getLogger(__name__)
+
 
 class SegGPTHandler(BaseHandler):
     """
@@ -31,11 +33,11 @@ class SegGPTHandler(BaseHandler):
             raise RuntimeError("Missing the model.pt file")
 
         extras_zip_path = os.path.join(model_dir, "seggpt_extras.zip")
-        if not os.path.exists(os.path.join(model_dir, "seggpt_models.py")):
+        if not os.path.exists(os.path.join(os.path.join(model_dir, 'src'), "models.py")):
             with zipfile.ZipFile(extras_zip_path, "r") as zip_file:
                 zip_file.extractall(model_dir)
 
-        from seggpt_models import seggpt_vit_large_patch16_input896x448
+        from src.models import seggpt_vit_large_patch16_input896x448
 
         # Determine device
         if torch.cuda.is_available():
@@ -70,47 +72,58 @@ class SegGPTHandler(BaseHandler):
 
         self.initialized = True
 
+
     def preprocess(self, data):
         """ Preprocess the data into a form usable by SegGPT """
-        images = []
-        logger.info('processing img')
 
+        preprocessed_data = defaultdict(list)
         for row in data:
-            logger.info('processing row')
-            image = row.get("data") or row.get("body")
-            logger.info('got image')
-            if isinstance(image, str):
-                logger.info('image is a str')
-                image = base64.b64decode(image)
+            request = row.get('body')
 
-            # If the image is sent as bytesarray
-            if isinstance(image, (bytearray, bytes)):
-                logger.info('image is a bytes array')
-                image = Image.open(io.BytesIO(image))
+            input_imgs = request.get('input')
+            for input_img in input_imgs:
+                preprocessed_data['input'].append((Image.open(io.BytesIO(base64.b64decode(input_img[0]))).convert("RGB"), input_img[1]))
 
-            else:
-                # if the image is a list
-                logger.info('image is neither')
-                image = torch.FloatTensor(image)
+            prompt_imgs = request.get('prompts')
+            for prompt_img in prompt_imgs:
+                preprocessed_data['prompts'].append(Image.open(io.BytesIO(base64.b64decode(prompt_img[0]))).convert("RGB"))
 
-            images.append(image)
+            target_imgs = request.get('targets')
+            for target_img in target_imgs:
+                preprocessed_data['targets'].append(Image.open(io.BytesIO(base64.b64decode(target_img[0]))).convert("RGB"))
 
-        return images[0]
+            preprocessed_data['output_dir'] = request.get('output_dir')
+            preprocessed_data['patch_images'] = request.get('patch_images')
+            preprocessed_data['num_prompts'] = request.get('num_prompts')
+
+        return preprocessed_data
 
 
     def inference(self, data):
         """ Perform inference on the input data """
-        from seggpt_engine import inference_single_image                                                                    
+        from src.engine import infer                                                                
 
-        output = inference_single_image(self.model, self.device, data, 'prompts', 'targets', 'outputs', True, 8, save_image=False)
+        # print('input data: ', data['input'])
+        # print('prompts: ', data['prompts'])
+        # print('targets: ', data['targets'])
+        # print('output_dir: ', data['output_dir'])
+        # print('patch_images: ', data['patch_images'])
+        # print('num_prompts: ', data['num_prompts'])
+
+        output = infer(self.model, self.device, data['input'], data['prompts'], data['targets'], data['output_dir'], data['patch_images'], data['num_prompts'], save_images=False)
         return output
+
 
     def postprocess(self, data):
         """
         Convert the output PIL images into a binary form. 
         """
-        binary = io.BytesIO()
-        data.save(binary, format='PNG')
-        binary_image = binary.getvalue()
-        binary.close()
-        return [binary_image]
+        output_merged_imgs, output_masks = data
+
+        # binary = io.BytesIO()
+        # data.save(binary, format='PNG')
+        # binary_image = binary.getvalue()
+        # binary.close()
+        # return [binary_image]
+
+        return []

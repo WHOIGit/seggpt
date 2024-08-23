@@ -248,14 +248,14 @@ def convert_to_pil(img_input: str | Image.Image | list) -> list[tuple[Image.Imag
             if isinstance(img, Image.Image):
                 imgs.append((img, ''))
             elif isinstance(img, tuple):
-                if isinstance(img[0], Image.Image) and isinstance(img[1], str):
-                    imgs.append(img)
-                raise TypeError(f'All list elements must be PIL Images, not {type(img)}')
+                # if isinstance(img[0], Image.Image) and isinstance(img[1], str):
+                imgs.append(img)
+                # raise TypeError(f'All list elements must be a tuple of form (Image.Image, str), not ({type(img[0])}. {type(img[1])})')
 
     return imgs
 
 
-def infer(model, device, input: str | Image.Image | list, prompt: str | Image.Image | list, target: str | Image.Image | list, output_dir: str, patchify: bool, num_patches: int, save_images: bool):
+def infer(model, device, input: str | Image.Image | list, prompt: str | Image.Image | list, target: str | Image.Image | list, output_dir: str, patchify: bool, num_prompts: int, save_images: bool):
     """
     Run inference on an input, using the given prompt and target as context. 
     """
@@ -266,7 +266,7 @@ def infer(model, device, input: str | Image.Image | list, prompt: str | Image.Im
     patch_size = 448
 
     if patchify:
-        prompts, targets = patch_prompts(prompts, targets, patch_size, num_patches)
+        prompts, targets = patch_prompts(prompts, targets, patch_size, num_prompts)
 
     output_merged_imgs = []
     output_masks = []

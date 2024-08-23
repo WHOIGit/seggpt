@@ -1,1 +1,2 @@
 install_py_dep_per_model=true
+max_request_size=30000000
