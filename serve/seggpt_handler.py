@@ -1,11 +1,12 @@
 import io
 import os
-import torch
 import base64
 import logging
 import zipfile
-from PIL import Image
 from collections import defaultdict
+import torch
+from PIL import Image
+
 
 from ts.torch_handler.base_handler import BaseHandler
 
@@ -19,7 +20,7 @@ class SegGPTHandler(BaseHandler):
     """
 
     def initialize(self, context):
-        """ Load the model and set it to eval mode """
+        """Load the model and set it to eval mode"""
 
         self.manifest = context.manifest
         serialized_file = self.manifest["model"]["serializedFile"]
@@ -33,7 +34,9 @@ class SegGPTHandler(BaseHandler):
             raise RuntimeError("Missing the model.pt file")
 
         extras_zip_path = os.path.join(model_dir, "seggpt_extras.zip")
-        if not os.path.exists(os.path.join(os.path.join(model_dir, 'src'), "models.py")):
+        if not os.path.exists(
+            os.path.join(os.path.join(model_dir, "src"), "models.py")
+        ):
             with zipfile.ZipFile(extras_zip_path, "r") as zip_file:
                 zip_file.extractall(model_dir)
 
@@ -42,10 +45,10 @@ class SegGPTHandler(BaseHandler):
         # Determine device
         if torch.cuda.is_available():
             logger.info("Using CUDA")
-            self.map_location = 'cuda'
-            self.device = torch.device('cuda:0')
+            self.map_location = "cuda"
+            self.device = torch.device("cuda:0")
 
-        # MPS does not support all of PyTorch's functions used in SegGPT yet. The operator aten::upsample_bicubic2d.out 
+        # MPS does not support all of PyTorch's functions used in SegGPT yet. The operator aten::upsample_bicubic2d.out
         # is not implemented for MPS
         # elif torch.backends.mps.is_available():
         #     logger.info("Using MPS")
@@ -54,16 +57,18 @@ class SegGPTHandler(BaseHandler):
         #     os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
         else:
             logger.info("Using CPU")
-            self.map_location = 'cpu'
-            self.device = torch.device('cpu')
+            self.map_location = "cpu"
+            self.device = torch.device("cpu")
 
         # Load model
         self.model = seggpt_vit_large_patch16_input896x448()
-        self.model.seg_type = 'instance'
+        self.model.seg_type = "instance"
         seggpt_chkpt = torch.load(
-            os.path.join(model_dir, "seggpt_vit_large.pth"), map_location=self.map_location, weights_only=True
+            os.path.join(model_dir, "seggpt_vit_large.pth"),
+            map_location=self.map_location,
+            weights_only=True,
         )
-        self.model.load_state_dict(seggpt_chkpt['model'], strict=False)
+        self.model.load_state_dict(seggpt_chkpt["model"], strict=False)
 
         self.model.to(self.device)
         self.model.eval()
@@ -72,58 +77,82 @@ class SegGPTHandler(BaseHandler):
 
         self.initialized = True
 
-
     def preprocess(self, data):
-        """ Preprocess the data into a form usable by SegGPT """
+        """Preprocess the data into a form usable by SegGPT"""
 
         preprocessed_data = defaultdict(list)
         for row in data:
-            request = row.get('body')
+            request = row.get("body")
 
-            input_imgs = request.get('input')
+            input_imgs = request.get("input")
             for input_img in input_imgs:
-                preprocessed_data['input'].append((Image.open(io.BytesIO(base64.b64decode(input_img[0]))).convert("RGB"), input_img[1]))
+                preprocessed_data["input"].append(
+                    (
+                        Image.open(io.BytesIO(base64.b64decode(input_img[0]))).convert(
+                            "RGB"
+                        ),
+                        input_img[1],
+                    )
+                )
 
-            prompt_imgs = request.get('prompts')
+            prompt_imgs = request.get("prompts")
             for prompt_img in prompt_imgs:
-                preprocessed_data['prompts'].append(Image.open(io.BytesIO(base64.b64decode(prompt_img[0]))).convert("RGB"))
+                preprocessed_data["prompts"].append(
+                    Image.open(io.BytesIO(base64.b64decode(prompt_img[0]))).convert(
+                        "RGB"
+                    )
+                )
 
-            target_imgs = request.get('targets')
+            target_imgs = request.get("targets")
             for target_img in target_imgs:
-                preprocessed_data['targets'].append(Image.open(io.BytesIO(base64.b64decode(target_img[0]))).convert("RGB"))
+                preprocessed_data["targets"].append(
+                    Image.open(io.BytesIO(base64.b64decode(target_img[0]))).convert(
+                        "RGB"
+                    )
+                )
 
-            preprocessed_data['output_dir'] = request.get('output_dir')
-            preprocessed_data['patch_images'] = request.get('patch_images')
-            preprocessed_data['num_prompts'] = request.get('num_prompts')
+            preprocessed_data["output_dir"] = request.get("output_dir")
+            preprocessed_data["patch_images"] = request.get("patch_images")
+            preprocessed_data["num_prompts"] = request.get("num_prompts")
 
         return preprocessed_data
 
-
     def inference(self, data):
-        """ Perform inference on the input data """
-        from src.engine import infer                                                                
+        """Perform inference on the input data"""
+        from src.engine import infer
 
-        # print('input data: ', data['input'])
-        # print('prompts: ', data['prompts'])
-        # print('targets: ', data['targets'])
-        # print('output_dir: ', data['output_dir'])
-        # print('patch_images: ', data['patch_images'])
-        # print('num_prompts: ', data['num_prompts'])
+        output_merged_imgs, output_masks = infer(
+            self.model,
+            self.device,
+            data["input"],
+            data["prompts"],
+            data["targets"],
+            data["output_dir"],
+            data["patch_images"],
+            data["num_prompts"],
+            save_images=False,
+        )
+        return output_merged_imgs, output_masks
 
-        output = infer(self.model, self.device, data['input'], data['prompts'], data['targets'], data['output_dir'], data['patch_images'], data['num_prompts'], save_images=False)
-        return output
-
+    def _encode_image_to_base64(self, image):
+        """
+        Encode the given PIL Image as a base64 string.
+        """
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        img_data = buffered.getvalue()
+        img_str = base64.b64encode(img_data).decode("utf-8")
+        return img_str
 
     def postprocess(self, data):
         """
-        Convert the output PIL images into a binary form. 
+        Convert the output PIL images into a binary form.
         """
         output_merged_imgs, output_masks = data
 
-        # binary = io.BytesIO()
-        # data.save(binary, format='PNG')
-        # binary_image = binary.getvalue()
-        # binary.close()
-        # return [binary_image]
+        # binarized_merged = [
+        #     self._encode_image_to_base64(img) for img in output_merged_imgs
+        # ]
+        binarized_masks = [self._encode_image_to_base64(img) for img in output_masks]
 
-        return []
+        return [binarized_masks]

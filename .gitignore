@@ -1,0 +1,13 @@
+# MacOS system files
+.DS_Store
+
+# Byte-compiled files
+__pycache__/
+
+# Environments
+.venv
+.venv-ts
+
+# TorchServe
+serve/logs
+serve/model_store
