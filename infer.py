@@ -36,7 +36,7 @@ def prepare_model(chkpt_dir, arch='seggpt_vit_large_patch16_input896x448', seg_t
     model = getattr(models, arch)()
     model.seg_type = seg_type
     # load model
-    checkpoint = torch.load(chkpt_dir, map_location='cpu', weights_only=True)
+    checkpoint = torch.load(chkpt_dir, map_location='cpu')
     msg = model.load_state_dict(checkpoint['model'], strict=False)
     model.eval()
     return model

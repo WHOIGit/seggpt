@@ -202,7 +202,7 @@ def to_patches(image: Image.Image, patch_size: int):
     return patches
 
 
-def patch_prompts(prompt_imgs: list[Image.Image], target_imgs: list[Image.Image], patch_size: int = 448, num_patches: int = 8):
+def patch_prompts(prompt_imgs, target_imgs, patch_size: int = 448, num_patches: int = 8):
     """
     Generate prompt and target PIL Images from the given prompt and target directories. Split them 
     into patches if patchify is True.
@@ -223,7 +223,7 @@ def patch_prompts(prompt_imgs: list[Image.Image], target_imgs: list[Image.Image]
     return prompt_images, target_images
 
 
-def convert_to_pil(img_input: str | Image.Image | list) -> list[tuple[Image.Image, str]]:
+def convert_to_pil(img_input):
     """
     Convert image input of various forms into a list of PIL Images. 
     Accepts a string path to a directory of images, a string path to a specific image,
@@ -255,7 +255,7 @@ def convert_to_pil(img_input: str | Image.Image | list) -> list[tuple[Image.Imag
     return imgs
 
 
-def infer(model, device, input: str | Image.Image | list, prompt: str | Image.Image | list, target: str | Image.Image | list, output_dir: str, patchify: bool, num_prompts: int, save_images: bool):
+def infer(model, device, input, prompt, target, output_dir: str, patchify: bool, num_prompts: int, save_images: bool):
     """
     Run inference on an input, using the given prompt and target as context. 
     """
