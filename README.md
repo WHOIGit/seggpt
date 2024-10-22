@@ -45,3 +45,7 @@ python infer.py --input_dir {directory of input images} --prompt_dir {directory 
 ## **TorchServe Inference**
 
 TODO
+
+## **Slurm Inference**
+
+To run with Slurm, follow the [Slurm README](slurm/README.md)
