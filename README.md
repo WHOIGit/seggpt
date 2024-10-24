@@ -41,11 +41,26 @@ Run inference on a directory of input images, using a directory of prompt images
 python infer.py --input_dir {directory of input images} --prompt_dir {directory of prompt images} --target_dir {directory of target images} --output_dir {desired output directory}
 ```
 
+## **Dockerized Inference**
+
+Build the Docker image
+```
+docker build -t seggpt:latest .
+```
+
+Run inference
+```
+docker run --rm -v {directory of input images}:/main/data/inputs -v {directory of prompt images}:/main/data/prompts -v {directory of target images}:/main/data/targets -v {desired output directory}:/main/data/output --gpus all seggpt:latest python3 infer.py --input_dir /main/data/inputs --prompt_dir /main/data/prompts --target_dir /main/data/targets --output_dir /main/data/output
+```
 
 ## **TorchServe Inference**
 
-TODO
+To run with TorchServe, follow the [TorchServe README](serve/README.md).
+
+## **Dockerized TorchServe**
+
+To run with dockerized TorchServe, follow the [TorchServe README](serve/README.md).
 
 ## **Slurm Inference**
 
-To run with Slurm, follow the [Slurm README](slurm/README.md)
+To run with Slurm, follow the [Slurm README](slurm/README.md).
