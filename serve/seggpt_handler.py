@@ -121,17 +121,18 @@ class SegGPTHandler(BaseHandler):
         """Perform inference on the input data"""
         from src.engine import infer
 
-        output_merged_imgs, output_masks = infer(
-            self.model,
-            self.device,
-            data["input"],
-            data["prompts"],
-            data["targets"],
-            data["output_dir"],
-            data["patch_images"],
-            data["num_prompts"],
-            save_images=False,
-        )
+        with torch.no_grad():
+            output_merged_imgs, output_masks = infer(
+                self.model,
+                self.device,
+                data["input"],
+                data["prompts"],
+                data["targets"],
+                data["output_dir"],
+                data["patch_images"],
+                data["num_prompts"],
+                save_images=False,
+            )
         return output_merged_imgs, output_masks
 
     def _encode_image_to_base64(self, image):
@@ -154,5 +155,7 @@ class SegGPTHandler(BaseHandler):
         #     self._encode_image_to_base64(img) for img in output_merged_imgs
         # ]
         binarized_masks = [self._encode_image_to_base64(img) for img in output_masks]
+        
+        torch.cuda.empty_cache()
 
         return [binarized_masks]
