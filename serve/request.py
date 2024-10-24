@@ -47,6 +47,8 @@ def request(
 
     if num_prompts == "all":
         num_prompts_for_request = len(prompt_imgs)
+    else:
+        num_prompts_for_request = num_prompts
 
     data = {
         "input": input_imgs,
