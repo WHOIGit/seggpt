@@ -12,22 +12,6 @@ imagenet_mean = np.array([0.485, 0.456, 0.406])
 imagenet_std = np.array([0.229, 0.224, 0.225])
 
 
-class Cache(list):
-    """
-    A class for a FIFO cache with a specified maximum size.
-    """
-    def __init__(self, max_size=0):
-        super().__init__()
-        self.max_size = max_size
-
-    def append(self, x):
-        if self.max_size <= 0:
-            return
-        super().append(x)
-        if len(self) > self.max_size:
-            self.pop(0)
-
-
 @torch.no_grad()
 def run_one_image(img, tgt, model, device):
     """
