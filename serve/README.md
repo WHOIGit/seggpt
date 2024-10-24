@@ -24,4 +24,17 @@ python request.py --input_dir {directory of input images} --prompt_dir {director
 
 # Running with dockerized TorchServe
 
-TODO
+Build the TorchServe docker image
+```
+docker build -t seggpt-ts:latest .
+```
+
+Run the docker container
+```
+docker run --rm --name seggpt -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 seggpt-ts:latest
+```
+
+Send a request
+```
+python request.py --input_dir {directory of input images} --prompt_dir {directory of prompt images} --target_dir {directory of target images} --output_dir {desired output directory}
+```
