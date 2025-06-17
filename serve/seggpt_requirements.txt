@@ -35,7 +35,7 @@ pathspec==0.12.1
 pillow==10.4.0
 platformdirs==4.2.2
 portalocker==2.10.0
-protobuf==4.25.3
+protobuf==4.25.8
 pycocotools==2.0.8
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
