@@ -11,7 +11,7 @@ cycler==0.12.1
 detectron2 @ git+https://github.com/facebookresearch/detectron2.git@70f454304e1a38378200459dd2dbca0f0f4a5ab4
 fairscale==0.4.13
 filelock==3.15.4
-fonttools==4.53.1
+fonttools==4.61.0
 fsspec==2024.6.1
 fvcore==0.1.5.post20221221
 grpcio==1.64.1
